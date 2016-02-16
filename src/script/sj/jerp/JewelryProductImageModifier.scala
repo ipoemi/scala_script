@@ -12,7 +12,8 @@ import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
 
-object 주얼리제품이미지수정 extends App {
+object JewelryProductImageModifier extends App {
+	println(this.getClass.getName + " 시작")
 
 	def getCroppedImage(source: BufferedImage, tolerance: Double, marginRatio: Double): BufferedImage = {
 		// Get our top-left pixel color as our "baseline" for cropping
@@ -203,5 +204,7 @@ object 주얼리제품이미지수정 extends App {
 		}
 	}
 	*/
+	
+	println(this.getClass.getName + " 완료")
 
 }
