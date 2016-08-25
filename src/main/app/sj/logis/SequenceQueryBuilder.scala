@@ -28,19 +28,11 @@ object SequenceQueryBuilder {
 
 		val strSQL = new StringBuffer();
 		strSQL.append("\nSELECT * ");
-		strSQL.append("\n  FROM LOGIS_BACKUP.세트솔리드변경_{숫자}_세정 ");
-		strSQL.append("\n WHERE (회사코드 ");
-		strSQL.append("\n             , 센터코드 ");
-		strSQL.append("\n             , 이동일자 ");
-		strSQL.append("\n             , 일련순번) IN (SELECT 회사코드 ");
-		strSQL.append("\n             , 센터코드 ");
-		strSQL.append("\n             , 이동일자 ");
-		strSQL.append("\n             , 일련순번 ");
-		strSQL.append("\n          FROM LOGIS_BACKUP.세트솔리드변경_{숫자}_세정 ");
-		strSQL.append("\n         GROUP BY 회사코드, 센터코드, 이동일자, 일련순번 ");
-		strSQL.append("\n        HAVING COUNT(DISTINCT 창고구분) > 1) ");
+		strSQL.append("\n  FROM LOGIS_BACKUP.재고조정_{숫자}_세정 ");
+		strSQL.append("\n WHERE 조정원인 NOT IN ('1', '2') ");
+		strSQL.append("\n   AND 창고구분 != 'X0' ");
 
-		val sql = new StringBuffer(queryBuilder(strSQL.toString, "\\{숫자\\}", "2007", "2010"))
+		val sql = new StringBuffer(queryBuilder(strSQL.toString, "\\{숫자\\}", "2003", "2012"))
 
 		println(sql)
 
