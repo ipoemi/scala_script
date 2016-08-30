@@ -11,7 +11,6 @@ import com.typesafe.config._
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpMethod
-import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.HttpMethods
 import akka.http.scaladsl.model.HttpRequest
 import akka.http.scaladsl.model.HttpResponse
@@ -67,8 +66,8 @@ object ComicsScraper {
 		val targetFile = new File(targetDir.getAbsolutePath + "/" + fileName)
 		if (targetFile.exists && targetFile.length() < fileSizeThreshold) targetFile.delete()
 		if (!targetFile.exists) {
-			println(targetFile.getAbsoluteFile)
-			println(fileUrl)
+			//println(targetFile.getAbsoluteFile)
+			//println(fileUrl)
 			requestUrl(fileUrl, HttpMethods.GET).flatMap { response =>
 				if (response.status == StatusCodes.OK) {
 					val fout = new FileOutputStream(targetFile)
@@ -76,10 +75,9 @@ object ComicsScraper {
 						fout.write(byteString.toByteBuffer.array())
 					}.recover {
 						case e: Exception =>
-					}.map {
-						_ =>
-							fout.close()
-							Some(response)
+					}.map { _ =>
+						fout.close()
+						Some(response)
 					}
 				} else {
 					Future.successful(Some(response))
@@ -145,7 +143,7 @@ object ComicsScraper {
 				result
 		}
 	}
-	
+
 	def getUrlList(rootPathForGet: String): Vector[String] = {
 		val browser = JsoupBrowser()
 		val doc = browser.get(rootPathForGet)
@@ -157,55 +155,67 @@ object ComicsScraper {
 		}
 	}
 
+	def getImageSrcList(htmlContent: String): (String, Vector[String]) = {
+		val doc = JsoupBrowser().parseString(htmlContent)
+		val imgTagList = (doc >> element("#primary") >> elementList("img")).filter { elem =>
+			val src = elem.attr("src").toLowerCase()
+			val srcBoolean = src.toLowerCase.contains(".png") || src.contains(".jpg") || src.contains(".gif")
+			val dataSrcBoolean = if (elem.attrs.contains("data-src")) {
+				val dataSrc = elem.attr("data-src").toLowerCase
+				dataSrc.toLowerCase.contains(".png") || dataSrc.contains(".jpg") || dataSrc.contains(".gif")
+			} else false
+			srcBoolean || dataSrcBoolean
+		}
+		val imgSrcList = imgTagList.map { elem =>
+			if (elem.attrs.contains("data-src")) {
+				elem.attr("data-src")
+			} else {
+				elem.attr("src")
+			}
+		}
+		(doc.title, imgSrcList.toVector)
+	}
+	
+	def saveImgSrc(rootPathForSave:String, title: String, imgSrcList: Vector[String]): Future[_] = {
+		val targetDir = new File(rootPathForSave + "/" + "%03d".format(title.replaceAll("\\D", "").toInt))
+		if (!targetDir.exists()) targetDir.mkdirs()
+		
+		val imgFutureList = imgSrcList.zipWithIndex.map {
+			case (href, idx) =>
+				val tmpUrl = new URL(href)
+				val fileUrl = new URL(tmpUrl.getProtocol + "://" + tmpUrl.getHost + tmpUrl.getPath)
+				val extension = fileUrl.getPath.substring(fileUrl.getPath.lastIndexOf("."))
+				val fileName = "%010d".format(idx) + extension
+				val responseFt = saveFile(targetDir, fileName, fileUrl)
+				responseFt.flatMap {
+					case Some(response) =>
+						if (response.status == StatusCodes.TemporaryRedirect) {
+							response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).map { bString =>
+								val doc = browser.parseString(bString.decodeString("utf-8"))
+								val aTag = doc >> element("a")
+								saveFile(targetDir, fileName, new URL(aTag.attr("href")))
+							}
+						} else {
+							Future { None }
+						}
+					case None => Future { None }
+				}
+		}
+		
+		Future.sequence(imgFutureList)
+	}
+
 	def saveComics(rootPathForGet: String, rootPathForSave: String): Vector[Future[Any]] = {
-		strRootPath
 		val hrefList = getUrlList(rootPathForGet: String)
 		hrefList.map { urlStr =>
 			val url = new URL(urlStr)
-			requestUrl(url, HttpMethods.POST).flatMap { response =>
-				response.entity.dataBytes.runFold(ByteString(""))(_ ++ _).flatMap { bString =>
-					val doc = browser.parseString(bString.decodeString("utf-8"))
-					val targetDir = new File(rootPathForSave + "/" + "%03d".format(doc.title.replaceAll("\\D", "").toInt))
-					if (!targetDir.exists()) targetDir.mkdirs()
-					val imgTagList = (doc >> element("#primary") >> elementList("img")).filter { elem =>
-						val src = elem.attr("src").toLowerCase()
-						val srcBoolean = src.toLowerCase.contains(".png") || src.contains(".jpg") || src.contains(".gif")
-						val dataSrcBoolean = if (elem.attrs.contains("data-src")) {
-							val dataSrc = elem.attr("data-src").toLowerCase
-							dataSrc.toLowerCase.contains(".png") || dataSrc.contains(".jpg") || dataSrc.contains(".gif")
-						} else false
-						srcBoolean || dataSrcBoolean
-					}
-					val hrefList = imgTagList.map { elem =>
-						if (elem.attrs.contains("data-src")) {
-							elem.attr("data-src")
-						} else {
-							elem.attr("src")
-						}
-					}
-					Future.sequence(hrefList.zipWithIndex.map {
-						case (href, idx) =>
-							val tmpUrl = new URL(href)
-							val fileUrl = new URL(tmpUrl.getProtocol + "://" + tmpUrl.getHost + tmpUrl.getPath)
-							val extension = fileUrl.getPath.substring(fileUrl.getPath.lastIndexOf("."))
-							//val fileName = fileUrl.getPath.substring(fileUrl.getPath.lastIndexOf('/') + 1)
-							val fileName = "%010d".format(idx) + extension
-							val responseFt = saveFile(targetDir, fileName, fileUrl)
-							responseFt.flatMap {
-								case Some(response) =>
-									if (response.status == StatusCodes.TemporaryRedirect) {
-										response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).map { bString =>
-											val doc = browser.parseString(bString.decodeString("utf-8"))
-											val aTag = doc >> element("a")
-											saveFile(targetDir, fileName, new URL(aTag.attr("href")))
-										}
-									} else {
-										Future { None }
-									}
-								case None => Future { None }
-							}
-					})
-				}
+			val aa = for {
+				response <- requestUrl(url, HttpMethods.POST)
+				byteString <- response.entity.dataBytes.runFold(ByteString(""))(_ ++ _)
+				(title, imgSrcList) = getImageSrcList(byteString.decodeString("utf-8"))
+			} yield lastResponse
+			aa.flatMap { imgSrcList =>
+				Future {}
 			}
 		}
 	}
@@ -288,7 +298,7 @@ object ComicsScraper {
 		}
 		actorSystem.terminate()
 		*/
-		
+
 		val futureList = saveComicsToZip(rootPathForGet, rootPathForSave)
 		Future.sequence(futureList).map { _ =>
 			Http().shutdownAllConnectionPools().onComplete { _ =>
