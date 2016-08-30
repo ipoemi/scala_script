@@ -99,39 +99,27 @@ object DBUtil {
 			}
 		}
 		newSql.append(sql.substring(preIdx));
-		val prepTry = Try {
-			val prep = conn.prepareStatement(newSql.toString)
-			params.zipWithIndex.foreach {
-				case (param, idx) =>
-					prep.setString(idx + 1, param)
-			}
-			prep
-		}
-		val rsTry = prepTry.flatMap { prep =>
+		val prepTry = Try { conn.prepareStatement(newSql.toString) }
+		prepTry.flatMap { prep =>
 			Try {
-				prep.executeQuery()
+				params.zipWithIndex.foreach {
+					case (param, idx) => prep.setString(idx + 1, param)
+				}
 			}
 		}
+		val rsTry = prepTry.flatMap { prep => Try { prep.executeQuery() } }
 		if (classTag[S] == classTag[Stream[_]]) {
 			rsTry match {
 				case Success(rs) => rs.toStream
-				case Failure(e) =>
-					e.printStackTrace()
-					throw e
+				case Failure(e) => e.printStackTrace(); throw e
 			}
 		} else {
-			val resultTry = rsTry.flatMap { rs =>
-				Try {
-					resultSetToList(rs)
-				}
-			}
+			val resultTry = rsTry.flatMap { rs => Try { resultSetToList(rs) } }
 			rsTry.map(_.close())
 			prepTry.map(_.close())
 			resultTry match {
 				case Success(result) => result
-				case Failure(e) =>
-					e.printStackTrace()
-					throw e
+				case Failure(e) => e.printStackTrace(); throw e
 			}
 		}
 	}
