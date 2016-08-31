@@ -1,4 +1,4 @@
-package script.com
+package app.com
 
 object JoinConditionBuilder {
 	def main(args: Array[String]) = {

@@ -1,4 +1,4 @@
-package script.com
+package app.com
 
 import java.sql.DriverManager
 import scala.collection.mutable.ListBuffer

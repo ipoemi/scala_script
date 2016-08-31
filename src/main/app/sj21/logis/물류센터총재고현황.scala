@@ -1,4 +1,4 @@
-package script.sj21.logis
+package app.sj21.logis
 
 import java.io.FileOutputStream
 

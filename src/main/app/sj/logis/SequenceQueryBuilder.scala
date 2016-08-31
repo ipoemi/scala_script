@@ -1,4 +1,4 @@
-package script.sj.logis
+package app.sj.logis
 
 import java.awt.Color
 import java.awt.image.BufferedImage

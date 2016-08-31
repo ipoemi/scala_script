@@ -1,4 +1,4 @@
-package script.sj.jerp
+package app.sj.jerp
 
 import java.awt.Color
 import java.awt.image.BufferedImage

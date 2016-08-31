@@ -1,4 +1,4 @@
-package script.sj.logis
+package app.sj.logis
 
 import java.io.FileOutputStream
 import java.sql.DriverManager
