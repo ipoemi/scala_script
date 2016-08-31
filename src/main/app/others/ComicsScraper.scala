@@ -55,21 +55,22 @@ object ComicsScraper {
 
 	val fileSizeThreshold = 100 * 1000
 
-	def getUrlList(rootPathForGet: String): Vector[String] = {
+	def getUrlList(rootPathForGet: String): Vector[(String, String)] = {
 		val doc = JsoupBrowser().get(rootPathForGet)
 		
 		val aTagListOption = for {
 			element <- doc >?> element("#vContent")
-			aTag <- element >?> elementList("a")
-		} yield aTag
+			aTagList <- element >?> elementList("a")
+		} yield aTagList.toVector
 		
-		aTagListOption.getOrElse(Vector()).toVector.filter(_.contains("archives")).map { href =>
-			href.replaceAll("www.shencomics.com", "blog.yuncomics.com")
+		aTagListOption.getOrElse(Vector()).filter(_.attr("href").contains("archives")).map { aTag =>
+			val newHref = aTag.attr("href").replaceAll("www.shencomics.com", "blog.yuncomics.com")
 				.replaceAll("www.yuncomics.com", "blog.yuncomics.com")
+			(aTag.text, newHref)
 		}
 	}
 
-	def getImgSrcList(htmlContent: String): (String, Vector[String]) = {
+	def getImgSrcList(htmlContent: String): Vector[String] = {
 		val doc = JsoupBrowser().parseString(htmlContent)
 		val imgListOption = for {
 			primary <- doc >?> element("#primary")
@@ -92,7 +93,7 @@ object ComicsScraper {
 				elem.attr("src")
 			}
 		}
-		(doc.title, imgSrcList.toVector)
+		imgSrcList.toVector
 	}
 
 	def requestUrl(url: URL, method: HttpMethod): Future[HttpResponse] = {
@@ -178,13 +179,14 @@ object ComicsScraper {
 
 	def saveComics(rootPathForGet: String, rootPathForSave: String): Vector[Future[Vector[Done]]] = {
 		val hrefList = getUrlList(rootPathForGet: String)
-		hrefList.take(1).map { urlStr =>
+		hrefList.take(1).map { case (title, urlStr) =>
 			val url = new URL(urlStr)
+			println(s"${title}, ${url}")
 			println(url)
 			for {
 				response <- requestUrl(url, HttpMethods.POST)
 				bString <- response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _)
-				(title, imgSrcList) = getImgSrcList(bString.decodeString("utf-8"))
+				imgSrcList = getImgSrcList(bString.decodeString("utf-8"))
 				done <- saveImgSrcList(rootPathForSave, title, imgSrcList)
 			} yield done
 		}
@@ -241,14 +243,6 @@ object ComicsScraper {
 				println(s"--------------- ${this.getClass.getName} 종료 (${System.currentTimeMillis - startTime} ms ) ---------------")
 			}
 		}
-		
-		/*
-		val aa = Future.sequence(List.empty[Future[Any]])
-		println(aa)
-		aa.map { x => 
-		actorSystem.terminate()
- }
-		*/
 		
 	}
 
