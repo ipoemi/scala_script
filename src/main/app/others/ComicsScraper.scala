@@ -54,51 +54,101 @@ object ComicsScraper {
 	implicit val executionContext = actorSystem.dispatcher
 
 	val fileSizeThreshold = 100 * 1000
+	
+	val getUrlListFor = Map(
+			"MARUMARU" -> { rootPathForGet: String =>
+				val doc = JsoupBrowser().get(rootPathForGet)
+				
+				val aTagListOption = for {
+					element <- doc >?> element("#vContent")
+					aTagList <- element >?> elementList("a")
+				} yield aTagList.toVector
+				
+				aTagListOption.getOrElse(Vector()).filter(_.attr("href").contains("archives")).map { aTag =>
+					val newHref = aTag.attr("href").replaceAll("www.shencomics.com", "blog.yuncomics.com")
+						.replaceAll("www.yuncomics.com", "blog.yuncomics.com")
+					(aTag.text, newHref)
+				}
+			},
+			"ZANGSISI" -> { rootPathForGet: String =>
+				val doc = JsoupBrowser().get(rootPathForGet)
+				
+				val aTagListOption = for {
+					recentPost <- doc >?> element("#recent-post")
+					contents <- recentPost >?> element(".contents")
+					aTagList <- contents >?> elementList("a")
+				} yield aTagList.toVector
+				
+				aTagListOption.getOrElse(Vector()).map { aTag =>
+					(aTag.text, aTag.attr("href"))
+				}
+			})
+			
+	val getImgSrcListFor = Map(
+			"MARUMARU" -> { htmlContent: String =>
+				val doc = JsoupBrowser().parseString(htmlContent)
+				val imgListOption = for {
+					primary <- doc >?> element("#primary")
+					imgList <- primary >?> elementList("img")
+				} yield imgList
+				
+				val imgTagList = imgListOption.getOrElse(Vector()).filter { elem =>
+					val src = elem.attr("src").toLowerCase()
+					val srcBoolean = src.toLowerCase.contains(".png") || src.contains(".jpg") || src.contains(".gif")
+					val dataSrcBoolean = if (elem.attrs.contains("data-src")) {
+						val dataSrc = elem.attr("data-src").toLowerCase
+						dataSrc.toLowerCase.contains(".png") || dataSrc.contains(".jpg") || dataSrc.contains(".gif")
+					} else false
+					srcBoolean || dataSrcBoolean
+				}
+				val imgSrcList = imgTagList.map { elem =>
+					if (elem.attrs.contains("data-src")) {
+						elem.attr("data-src")
+					} else {
+						elem.attr("src")
+					}
+				}
+				imgSrcList.toVector
+			},
+			"ZANGSISI" -> { htmlContent: String =>
+				val doc = JsoupBrowser().parseString(htmlContent)
+				
+				val postOption = (doc >?> element("#recent-post")) match {
+					case opt @ Some(recentPost) => opt
+					case None => (doc >?> element("#post"))
+				}
 
-	def getUrlList(rootPathForGet: String): Vector[(String, String)] = {
-		val doc = JsoupBrowser().get(rootPathForGet)
-		
-		val aTagListOption = for {
-			element <- doc >?> element("#vContent")
-			aTagList <- element >?> elementList("a")
-		} yield aTagList.toVector
-		
-		aTagListOption.getOrElse(Vector()).filter(_.attr("href").contains("archives")).map { aTag =>
-			val newHref = aTag.attr("href").replaceAll("www.shencomics.com", "blog.yuncomics.com")
-				.replaceAll("www.yuncomics.com", "blog.yuncomics.com")
-			(aTag.text, newHref)
-		}
-	}
-
-	def getImgSrcList(htmlContent: String): Vector[String] = {
-		val doc = JsoupBrowser().parseString(htmlContent)
-		val imgListOption = for {
-			primary <- doc >?> element("#primary")
-			imgList <- primary >?> elementList("img")
-		} yield imgList
-		
-		val imgTagList = imgListOption.getOrElse(Vector()).filter { elem =>
-			val src = elem.attr("src").toLowerCase()
-			val srcBoolean = src.toLowerCase.contains(".png") || src.contains(".jpg") || src.contains(".gif")
-			val dataSrcBoolean = if (elem.attrs.contains("data-src")) {
-				val dataSrc = elem.attr("data-src").toLowerCase
-				dataSrc.toLowerCase.contains(".png") || dataSrc.contains(".jpg") || dataSrc.contains(".gif")
-			} else false
-			srcBoolean || dataSrcBoolean
-		}
-		val imgSrcList = imgTagList.map { elem =>
-			if (elem.attrs.contains("data-src")) {
-				elem.attr("data-src")
-			} else {
-				elem.attr("src")
-			}
-		}
-		imgSrcList.toVector
-	}
+				val imgTagListOption = for {
+					post <- postOption
+					contents <- post >?> element(".contents")
+					imgTagList <- contents >?> elementList("img")
+				} yield imgTagList.toVector
+				
+				val imgTagList = imgTagListOption.getOrElse(Vector()).filter { elem =>
+					val src = elem.attr("src").toLowerCase()
+					val srcBoolean = src.toLowerCase.contains(".png") || src.contains(".jpg") || src.contains(".gif")
+					val dataSrcBoolean = if (elem.attrs.contains("data-src")) {
+						val dataSrc = elem.attr("data-src").toLowerCase
+						dataSrc.toLowerCase.contains(".png") || dataSrc.contains(".jpg") || dataSrc.contains(".gif")
+					} else false
+					srcBoolean || dataSrcBoolean
+				}
+				val imgSrcList = imgTagList.map { elem =>
+					if (elem.attrs.contains("data-src")) {
+						elem.attr("data-src")
+					} else {
+						elem.attr("src")
+					}
+				}
+				imgSrcList.toVector
+			})
 
 	def requestUrl(url: URL, method: HttpMethod): Future[HttpResponse] = {
 		val connection = Http().outgoingConnection(url.getHost)
-		val req = HttpRequest(method = method, uri = url.getPath.split("/").map(URLEncoder.encode(_, "utf-8")).mkString("/"))
+		val uri =
+			(if (url.getPath == "/") "/" else url.getPath.split("/").map(URLEncoder.encode(_, "utf-8")).mkString("/")) +
+			(if (url.getQuery != null) "?" + url.getQuery else "")
+		val req = HttpRequest(method = method, uri = uri)
 			.withHeaders(RawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36"))
 		Source.single(req).via(connection).runWith(Sink.head)
 	}
@@ -177,16 +227,16 @@ object ComicsScraper {
 		}
 	}
 
-	def saveComics(rootPathForGet: String, rootPathForSave: String): Vector[Future[Vector[Done]]] = {
-		val hrefList = getUrlList(rootPathForGet: String)
-		hrefList.take(1).map { case (title, urlStr) =>
+	def saveComics(siteName:String, rootPathForGet: String, rootPathForSave: String): Vector[Future[Vector[Done]]] = {
+		val hrefList = getUrlListFor(siteName)(rootPathForGet: String)
+		hrefList.take(42).map { case (title, urlStr) =>
 			val url = new URL(urlStr)
 			println(s"${title}, ${url}")
 			println(url)
 			for {
 				response <- requestUrl(url, HttpMethods.POST)
 				bString <- response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _)
-				imgSrcList = getImgSrcList(bString.decodeString("utf-8"))
+				imgSrcList = getImgSrcListFor(siteName)(bString.decodeString("utf-8"))
 				done <- saveImgSrcList(rootPathForSave, title, imgSrcList)
 			} yield done
 		}
@@ -226,9 +276,11 @@ object ComicsScraper {
 
 		val startTime = System.currentTimeMillis
 
-		val rootPathForGet = "http://marumaru.in/b/manga/84968"
-		val rootPathForSave = "comics/블리치"
-		
+		//val rootPathForGet = "http://marumaru.in/b/manga/84968"
+		//val rootPathForSave = "comics/블리치"
+
+		val rootPathForGet = "http://zangsisi.net/?page_id=16147"
+		val rootPathForSave = "comics/드래곤볼"
 		/*
 		getLowVolumnFiles(Vector(new File(rootPathForSave)), Vector()).foreach { file =>
 			println(s"fileName: ${file}, size: ${file.length()}")
@@ -236,7 +288,7 @@ object ComicsScraper {
 		actorSystem.terminate()
 		*/
 		
-		val futureList = saveComics(rootPathForGet, rootPathForSave)
+		val futureList = saveComics("ZANGSISI", rootPathForGet, rootPathForSave)
 		Future.sequence(futureList).flatMap { _ =>
 			Http().shutdownAllConnectionPools().map { _ =>
 				actorSystem.terminate()
