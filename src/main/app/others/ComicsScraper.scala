@@ -55,6 +55,7 @@ object ComicsScraper {
 	val config = ConfigFactory.load()
 		.withValue("akka.loglevel", ConfigValueFactory.fromAnyRef("OFF"))
 		.withValue("akka.stdout-loglevel", ConfigValueFactory.fromAnyRef("OFF"))
+		.withValue("akka.http.host-connection-pool.client.parsing.illegal-header-warnings", ConfigValueFactory.fromAnyRef(false))
 		.withValue("akka.http.host-connection-pool.max-connections", ConfigValueFactory.fromAnyRef("2"))
 		.withValue("akka.http.host-connection-pool.max-open-requests", ConfigValueFactory.fromAnyRef("1024"))
 
@@ -137,12 +138,12 @@ object ComicsScraper {
 				} else {
 					val mainOuterOption = (doc >?> element(".main-outer"))
 					for {
-						mainOuter <- mainOuterOption 
+						mainOuter <- mainOuterOption
 						contents <- mainOuter >?> element(".post-body")
 						imgTagList <- contents >?> elementList("img")
 					} yield imgTagList.toVector
 				}
-			
+
 			val imgTagList = imgTagListOption.getOrElse(Vector()).filter { elem =>
 				val src = elem.attr("src").toLowerCase()
 				val srcBoolean = src.toLowerCase.contains(".png") || src.contains(".jpg") || src.contains(".gif")
@@ -232,7 +233,11 @@ object ComicsScraper {
 							if (response.status == StatusCodes.OK) {
 								saveFile(response, targetFile)
 							} else if (statusValue < 400 && statusValue >= 300) {
-								response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).flatMap { bString =>
+								response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).recover {
+									case e: Exception =>
+										e.printStackTrace()
+										ByteString.empty
+								}.flatMap { bString =>
 									val doc = JsoupBrowser().parseString(bString.decodeString("utf-8"))
 									val aTag = doc >> element("a")
 									requestUrl(new URL(aTag.attr("href")), HttpMethods.GET).flatMap { response =>
@@ -280,7 +285,7 @@ object ComicsScraper {
 		fosTry.map(_.close).recover { case e: Exception => e.printStackTrace() }
 		packTry
 	}
-	
+
 	def deleteDir(dir: Path): Try[Path] = {
 		Try {
 			Files.walkFileTree(dir, new SimpleFileVisitor[Path]() {
@@ -297,27 +302,39 @@ object ComicsScraper {
 					Files.deleteIfExists(dir)
 					FileVisitResult.CONTINUE
 				}
-				
+
 			})
 		}
 	}
-	
+
 	def getPageContent(response: HttpResponse): Future[ByteString] = {
 		val statusValue = response.status.intValue()
 		if (response.status == StatusCodes.OK) {
-			response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _)
+			response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).recover {
+				case e: Exception =>
+					e.printStackTrace()
+					ByteString.empty
+			}
 		} else if (statusValue < 400 && statusValue >= 300) {
-			response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).flatMap { bString =>
+			response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).recover {
+				case e: Exception =>
+					e.printStackTrace()
+					ByteString.empty
+			}.flatMap { bString =>
 				val doc = JsoupBrowser().parseString(bString.decodeString("utf-8"))
 				val aTag = doc >> element("a")
 				requestUrl(new URL(aTag.attr("href")), HttpMethods.GET).flatMap { response =>
-					response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _)
+					response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).recover {
+						case e: Exception =>
+							e.printStackTrace()
+							ByteString.empty
+					}
 				}
 			}
 		} else {
 			Future(ByteString.empty)
 		}
-		
+
 	}
 
 	def saveComics(siteName: String, rootPathForGet: String, rootPathForSave: String): Vector[Future[Vector[Done]]] = {
@@ -326,7 +343,7 @@ object ComicsScraper {
 			case ((title, urlStr), idx) =>
 				val newTitle = s"${"%03d".format(idx + 1)}.${title.replaceAll("[^ㄱ-ㅎ가-힣0-9a-zA-Z.\\-~ ]", "")}"
 				(newTitle, urlStr)
-		}.drop(16).map {
+		}.drop(25).map {
 			case (title, urlStr) =>
 				val url = new URL(urlStr)
 				val httpMethod = if (urlStr.contains("upload")) HttpMethods.GET else HttpMethods.POST
@@ -335,7 +352,7 @@ object ComicsScraper {
 				println(httpMethod)
 				val future = for {
 					response <- requestUrl(url, httpMethod)
-					bString <- getPageContent(response) 
+					bString <- getPageContent(response)
 					imgSrcList = getImgSrcListFor(siteName)(bString.decodeString("utf-8"))
 					done <- saveImgSrcList(rootPathForSave, title, imgSrcList)
 				} yield done
@@ -376,8 +393,8 @@ object ComicsScraper {
 		//val rootPathForGet = "http://marumaru.in/b/manga/84968"
 		//val rootPathForSave = "comics/블리치"
 
-		val rootPathForGet = "http://zangsisi.net/?page_id=11140"
-		val rootPathForSave = "comics/도로헤도로"
+		val rootPathForGet = "http://zangsisi.net/?page_id=21755"
+		val rootPathForSave = "comics/빈란드사가"
 		/*
 		getLowVolumnFiles(Vector(new File(rootPathForSave)), Vector()).foreach { file =>
 			println(s"fileName: ${file}, size: ${file.length()}")
