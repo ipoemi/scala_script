@@ -1,13 +1,29 @@
 package app.others
 
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.URL
+import java.net.URLEncoder
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
+import scala.concurrent.Await
 import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+import scala.util.Failure
+import scala.util.Try
 
 import com.typesafe.config._
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpMethod
@@ -20,36 +36,11 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
+
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
 import net.ruippeixotog.scalascraper.dsl.DSL.Parse._
-import java.net.URLEncoder
-import scala.annotation.tailrec
-import java.util.zip.ZipOutputStream
-import java.io.BufferedOutputStream
-import java.io.FileInputStream
-import java.io.BufferedInputStream
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipEntry
-import java.nio.file.FileSystems
-import java.nio.file.Paths
-import java.nio.file.Files
-import java.io.OutputStream
-import java.nio.file.OpenOption
-import java.nio.file.StandardOpenOption
-import scala.util.Try
-import java.nio.ByteBuffer
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
-import akka.Done
-import java.nio.file.SimpleFileVisitor
-import java.nio.file.Path
-import java.nio.file.attribute.BasicFileAttributes
-import java.io.IOException
-import java.nio.file.FileVisitResult
-import scala.util.Failure
-import scala.util.Success
 
 object ComicsScraper {
 	val config = ConfigFactory.load()
@@ -230,7 +221,7 @@ object ComicsScraper {
 		} else {
 			val targetDir = new File(pathSave + "/" + title)
 			if (!targetDir.exists()) targetDir.mkdirs()
-
+			
 			Future.sequence(imgSrcList.zipWithIndex.map {
 				case (src, idx) =>
 					val tmpUrl = new URL(src)
@@ -366,8 +357,8 @@ object ComicsScraper {
 		//val rootPathForGet = "http://marumaru.in/b/manga/84968"
 		//val rootPathForSave = "comics/블리치"
 
-		val rootPathForGet = "http://zangsisi.net/?page_id=10737"
-		val rootPathForSave = "comics/배가본드"
+		val rootPathForGet = "http://zangsisi.net/?p=98976"
+		val rootPathForSave = "comics/엔젤전설"
 		/*
 		getLowVolumnFiles(Vector(new File(rootPathForSave)), Vector()).foreach { file =>
 			println(s"fileName: ${file}, size: ${file.length()}")

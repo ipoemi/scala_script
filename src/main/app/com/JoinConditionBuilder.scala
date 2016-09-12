@@ -7,7 +7,7 @@ object JoinConditionBuilder {
 
 		val conditionBuilder = new StringBuilder()
 
-		val joinConditionList = List("사업부", "접수상담실", "발생구분", "발생년도", "일련순번")
+		val joinConditionList = "회사코드, 출고일자, 전표구분, 작업차수, 일련순번".split(",").map(_.trim())
 
 		val masterAlias = "A"
 

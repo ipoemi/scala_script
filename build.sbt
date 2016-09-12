@@ -10,8 +10,7 @@ resolvers += "Spray Repository" at "http://repo.spray.io"
 unmanagedBase := baseDirectory.value / "lib"
 
 //libraryDependencies += "com.oracle" % "ojdbc14" % "10.2.0.4.0"
-libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.3"
-libraryDependencies += "org.scalaz" %% "scalaz-concurrent" % "7.2.3"
+libraryDependencies += "org.typelevel" %% "cats" % "0.7.0"
 libraryDependencies += "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.7.3"
 libraryDependencies += "org.apache.poi" % "poi" % "3.14"
 libraryDependencies += "org.apache.poi" % "poi-ooxml" % "3.14"
@@ -20,6 +19,7 @@ libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.4.9"
 libraryDependencies += "com.typesafe.akka" %% "akka-http-core" % "2.4.9"
 libraryDependencies += "org.scalactic" %% "scalactic" % "3.0.0"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0" % "test"
+libraryDependencies += "org.scalafx" %% "scalafx" % "8.0.92-R10"
 
 scalacOptions ++= Seq("-Xlint", "-feature", "-unchecked", "-deprecation")
 

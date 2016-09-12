@@ -241,8 +241,9 @@ object QueryHelper {
 				i += 1
 			}
 			
+			historyTableScriptBuilder.append(s"\nDROP TABLE ${tableName}_H; ") ;
 			historyTableScriptBuilder.append(s"\nCREATE TABLE ${tableName}_H AS ") ;
-			historyTableScriptBuilder.append(s"\nSELECT CAST('' AS DATE) LOGDATE, CAST('' AS VARCHAR2(20)) LOGIP, CAST('' AS VARCHAR2(100)) HOST, CAST('' AS VARCHAR2(1)) TYPE, A.* FROM ${tableName} A WHERE 1 = 0 ") ;
+			historyTableScriptBuilder.append(s"\nSELECT CAST('' AS DATE) LOGDATE, CAST('' AS VARCHAR2(20)) LOGIP, CAST('' AS VARCHAR2(100)) HOST, CAST('' AS VARCHAR2(1)) TYPE, A.* FROM ${tableName} A WHERE 1 = 0; ") ;
 		}
 		connTry.map(_.close())
 
@@ -468,7 +469,8 @@ object QueryHelper {
 		println("--------------- " + this.getClass.getName + " 시작" + " ---------------")
 		println()
 		
-		val tableName = "운송장정보"
+		val tableName = "온라인센터입고처리내역"
+		println(getHistoryTable("sjlgs", "sjlgs", tableName))
 		println(getDeleteTrigger("sjlgs", "sjlgs", tableName))
 		println(getUpdateTrigger("sjlgs", "sjlgs", tableName))
 
