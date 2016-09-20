@@ -47,7 +47,7 @@ object ComicsScraper {
 		.withValue("akka.loglevel", ConfigValueFactory.fromAnyRef("OFF"))
 		.withValue("akka.stdout-loglevel", ConfigValueFactory.fromAnyRef("OFF"))
 		.withValue("akka.http.host-connection-pool.client.parsing.illegal-header-warnings", ConfigValueFactory.fromAnyRef(false))
-		.withValue("akka.http.host-connection-pool.max-connections", ConfigValueFactory.fromAnyRef("2"))
+		.withValue("akka.http.host-connection-pool.max-connections", ConfigValueFactory.fromAnyRef("1"))
 		.withValue("akka.http.host-connection-pool.max-open-requests", ConfigValueFactory.fromAnyRef("1024"))
 
 	implicit val actorSystem = ActorSystem("myActorSystem", config)
@@ -64,9 +64,7 @@ object ComicsScraper {
 			} yield aTagList.toVector
 
 			aTagListOption.getOrElse(Vector()).filter(_.attr("href").contains("archives")).map { aTag =>
-				val newHref = aTag.attr("href").replaceAll("www.shencomics.com", "blog.yuncomics.com")
-					.replaceAll("www.yuncomics.com", "blog.yuncomics.com")
-				(aTag.text, newHref)
+				(aTag.text, aTag.attr("href"))
 			}
 		},
 		"ZANGSISI" -> { rootPathForGet: String =>
@@ -299,20 +297,8 @@ object ComicsScraper {
 					ByteString.empty
 			}
 		} else if (statusValue < 400 && statusValue >= 300) {
-			response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).recover {
-				case e: Exception =>
-					e.printStackTrace()
-					ByteString.empty
-			}.flatMap { bString =>
-				val doc = JsoupBrowser().parseString(bString.decodeString("utf-8"))
-				val aTag = doc >> element("a")
-				requestUrl(new URL(aTag.attr("href")), HttpMethods.GET).flatMap { response =>
-					response.entity.dataBytes.runFold(ByteString.empty)(_ ++ _).recover {
-						case e: Exception =>
-							e.printStackTrace()
-							ByteString.empty
-					}
-				}
+			requestUrl(new URL(response.getHeader("Location").get.value), HttpMethods.GET).flatMap { response =>
+				getPageContent(response)
 			}
 		} else {
 			Future(ByteString.empty)
@@ -325,6 +311,7 @@ object ComicsScraper {
 		hrefList.zipWithIndex.map {
 			case ((title, urlStr), idx) =>
 				val newTitle = s"${"%03d".format(idx + 1)}.${title.replaceAll("[^ㄱ-ㅎ가-힣0-9a-zA-Z.\\-~ ]", "")}"
+				//val newTitle = title
 				(newTitle, urlStr)
 		}.map {
 			case (title, urlStr) =>
@@ -357,8 +344,8 @@ object ComicsScraper {
 		//val rootPathForGet = "http://marumaru.in/b/manga/84968"
 		//val rootPathForSave = "comics/블리치"
 
-		val rootPathForGet = "http://zangsisi.net/?p=98976"
-		val rootPathForSave = "comics/엔젤전설"
+		val rootPathForGet = "http://marumaru.in/b/manga/140296"
+		val rootPathForSave = "comics/칠석의나라"
 		/*
 		getLowVolumnFiles(Vector(new File(rootPathForSave)), Vector()).foreach { file =>
 			println(s"fileName: ${file}, size: ${file.length()}")
@@ -366,7 +353,7 @@ object ComicsScraper {
 		actorSystem.terminate()
 		*/
 		
-		val futureList = saveComics("ZANGSISI", rootPathForGet, rootPathForSave)
+		val futureList = saveComics("MARUMARU", rootPathForGet, rootPathForSave)
 		Future.sequence(futureList).flatMap { _ =>
 			Http().shutdownAllConnectionPools().map { _ =>
 				actorSystem.terminate()
