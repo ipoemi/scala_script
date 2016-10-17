@@ -470,9 +470,7 @@ object QueryHelper {
 		println()
 		
 		val tableName = "온라인센터입고처리내역"
-		println(getHistoryTable("sjlgs", "sjlgs", tableName))
-		println(getDeleteTrigger("sjlgs", "sjlgs", tableName))
-		println(getUpdateTrigger("sjlgs", "sjlgs", tableName))
+		println(getInsertStatement("sjlgs", "sjlgs", tableName))
 
 		println()
 		println("--------------- " + this.getClass.getName + " 완료" + " ---------------")

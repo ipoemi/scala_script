@@ -41,6 +41,7 @@ object DiceTest {
 			else if (re2._1 < re2._2) (re1._1, re1._2 + 1)
 			else re1
 		}
+
 		println(result)
 		//println((0 /: (1 to 175)) { (n, sum) => n + sum })
 		println("--------------- " + this.getClass.getName + " 완료" + " ---------------")
