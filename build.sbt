@@ -11,6 +11,7 @@ lazy val root = (project in file(".")).
 
 		resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
 		resolvers += "Spray Repository" at "http://repo.spray.io",
+		resolvers += "RoundEights" at "http://maven.spikemark.net/roundeights",
 
 		unmanagedBase := baseDirectory.value / "lib",
 
@@ -24,7 +25,11 @@ lazy val root = (project in file(".")).
 		libraryDependencies += "com.typesafe.akka" %% "akka-http-core" % "2.4.9",
 		libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0" % "test",
 		libraryDependencies += "junit" % "junit" % "4.8.1" % "test",
+		libraryDependencies += "com.roundeights" %% "hasher" % "1.2.0",
 		libraryDependencies += "org.scalafx" %% "scalafx" % "8.0.92-R10",
+		libraryDependencies += "io.reactivex" %% "rxscala" % "0.26.3",
+		libraryDependencies += "com.tumblr" %% "colossus" % "0.8.1"	,
+		libraryDependencies += "org.scala-lang" % "scala-swing" % "2.11.0-M7",
 
 		scalacOptions ++= Seq("-Xlint", "-feature", "-unchecked", "-deprecation"),
 

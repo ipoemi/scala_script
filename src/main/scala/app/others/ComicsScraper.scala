@@ -20,20 +20,20 @@ import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
 import net.ruippeixotog.scalascraper.dsl.DSL._
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import scala.util.{Failure, Try}
 
 object ComicsScraper {
-	val config = ConfigFactory.load()
-		.withValue("akka.loglevel", ConfigValueFactory.fromAnyRef("OFF"))
-		.withValue("akka.stdout-loglevel", ConfigValueFactory.fromAnyRef("OFF"))
-		.withValue("akka.http.host-connection-pool.client.parsing.illegal-header-warnings", ConfigValueFactory.fromAnyRef(false))
-		.withValue("akka.http.host-connection-pool.max-connections", ConfigValueFactory.fromAnyRef("1"))
-		.withValue("akka.http.host-connection-pool.max-open-requests", ConfigValueFactory.fromAnyRef("1024"))
+	val config: Config = ConfigFactory.load()
+			.withValue("akka.loglevel", ConfigValueFactory.fromAnyRef("OFF"))
+			.withValue("akka.stdout-loglevel", ConfigValueFactory.fromAnyRef("OFF"))
+			.withValue("akka.http.host-connection-pool.client.parsing.illegal-header-warnings", ConfigValueFactory.fromAnyRef(false))
+			.withValue("akka.http.host-connection-pool.max-connections", ConfigValueFactory.fromAnyRef("1"))
+			.withValue("akka.http.host-connection-pool.max-open-requests", ConfigValueFactory.fromAnyRef("1024"))
 
 	implicit val actorSystem = ActorSystem("myActorSystem", config)
 	implicit val materializer = ActorMaterializer()
-	implicit val executionContext = actorSystem.dispatcher
+	implicit val executionContext: ExecutionContextExecutor = actorSystem.dispatcher
 
 	val getUrlListFor = Map(
 		"MARUMARU" -> { rootPathForGet: String =>
@@ -52,7 +52,7 @@ object ComicsScraper {
 			val doc = JsoupBrowser().get(rootPathForGet)
 
 			val postOption = doc >?> element("#recent-post") match {
-				case opt@Some(recentPost) => opt
+				case opt @ Some(recentPost) => opt
 				case None => doc >?> element("#post")
 			}
 
@@ -97,7 +97,7 @@ object ComicsScraper {
 			val doc = JsoupBrowser().parseString(htmlContent)
 
 			val postOption = doc >?> element("#recent-post") match {
-				case opt@Some(recentPost) => opt
+				case opt @ Some(recentPost) => opt
 				case None => doc >?> element("#post")
 			}
 
@@ -140,9 +140,9 @@ object ComicsScraper {
 		val connection = Http().outgoingConnection(url.getHost)
 		val uri =
 			(if (url.getPath == "/") "/" else url.getPath.split("/").map(URLEncoder.encode(_, "utf-8")).mkString("/")) +
-				(if (url.getQuery != null) "?" + url.getQuery else "")
+					(if (url.getQuery != null) "?" + url.getQuery else "")
 		val req = HttpRequest(method = method, uri = uri)
-			.withHeaders(RawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36"))
+				.withHeaders(RawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36"))
 		Source.single(req).via(connection).runWith(Sink.head)
 	}
 
@@ -246,9 +246,10 @@ object ComicsScraper {
 		val fosTry = Try {
 			new FileOutputStream(zipFile)
 		}
-		val zosTry = fosTry.flatMap { fos => Try {
-			new ZipOutputStream(new BufferedOutputStream(fos))
-		}
+		val zosTry = fosTry.flatMap { fos =>
+			Try {
+				new ZipOutputStream(new BufferedOutputStream(fos))
+			}
 		}
 		println(dir)
 		println(zipFile)
@@ -345,14 +346,17 @@ object ComicsScraper {
 	def main(args: Array[String]): Unit = {
 		println(s"--------------- ${this.getClass.getName} 시작 ---------------")
 		println()
-		
+
 		val startTime = System.currentTimeMillis
 
-		val rootPathForGet = "http://zangsisi.net/?p=98601"
-		val rootPathForSave = "comics/오나의여신님"
+		val rootPathForGet = "http://zangsisi.net/?p=11332"
+		val rootPathForSave = "comics/악의꽃"
 
 		val futureList = saveComics("ZANGSISI", rootPathForGet, rootPathForSave)
-		Future.sequence(futureList).flatMap { _ =>
+		Future.sequence(futureList).recover {
+			case e: Exception =>
+				e.printStackTrace()
+		}.flatMap { _ =>
 			Http().shutdownAllConnectionPools().map { _ =>
 				actorSystem.terminate()
 				println(s"--------------- ${this.getClass.getName} 종료 (${System.currentTimeMillis - startTime} ms ) ---------------")

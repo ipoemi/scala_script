@@ -1,7 +1,7 @@
 package app.com
 
 object JoinConditionBuilder {
-	def main(args: Array[String]) = {
+	def main(args: Array[String]): Unit = {
 		println("--------------- " + this.getClass.getName + " 시작" + " ---------------")
 		println()
 

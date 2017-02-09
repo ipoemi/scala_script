@@ -8,8 +8,8 @@ object DiceTest {
 
 	val score = Map((0, 0) -> 0, (0, 1) -> 1, (0, 2) -> -1, (1, 0) -> -1, (1, 1) -> 0, (1, 2) -> 1, (2, 0) -> 1, (2, 1) -> -1, (2, 2) -> 0)
 
-	val seed1 = System.currentTimeMillis()
-	val seed2 = System.currentTimeMillis()
+	val seed1: Long = System.currentTimeMillis()
+	val seed2: Long = System.currentTimeMillis()
 
 	val rand1 = new Random(seed1)
 	val rand2 = new Random(seed2)
@@ -34,9 +34,9 @@ object DiceTest {
 		(result._1 / n, result._2 / n, result._3 / n)
 	}
 
-	def main(args: Array[String]) = {
+	def main(args: Array[String]): Unit = {
 		println("--------------- " + this.getClass.getName + " 시작" + " ---------------")
-		val result = ((0, 0) /: ((1 to n2).map(_ => getResult()))) { (re1, re2) =>
+		val result = ((0, 0) /: (1 to n2).map(_ => getResult())) { (re1, re2) =>
 			if (re2._1 > re2._2) (re1._1 + 1, re1._2)
 			else if (re2._1 < re2._2) (re1._1, re1._2 + 1)
 			else re1

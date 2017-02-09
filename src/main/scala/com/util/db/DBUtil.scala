@@ -19,12 +19,12 @@ object DBUtil {
 	implicit class ExtendedResultSet(rs: ResultSet) {
 
 		def toMap: Map[String, Any] = {
-			ListMap((for (idx <- (1 to rs.getMetaData.getColumnCount)) yield (rs.getMetaData.getColumnName(idx) -> rs.getString(idx))): _*)
+			ListMap((for (idx <- 1 to rs.getMetaData.getColumnCount) yield rs.getMetaData.getColumnName(idx) -> rs.getString(idx)): _*)
 		}
 
 		def toStream: Stream[Map[String, Any]] = {
 			new Iterator[Map[String, Any]] {
-				def hasNext = {
+				def hasNext: Boolean = {
 					try {
 						if (rs.next()) true
 						else {
@@ -39,32 +39,32 @@ object DBUtil {
 							false
 					}
 				}
-				def next(): Map[String, Any] = ListMap((for (idx <- (1 to rs.getMetaData.getColumnCount)) yield (rs.getMetaData.getColumnName(idx) -> rs.getString(idx))): _*)
+				def next(): Map[String, Any] = ListMap((for (idx <- 1 to rs.getMetaData.getColumnCount) yield rs.getMetaData.getColumnName(idx) -> rs.getString(idx)): _*)
 			}.toStream
 		}
 	}
 
-	private final val TAG = this.getClass.getName();
-	private final val PARAM_SEPERATOR = '|';
-	private final val PARAM_SEPERATOR_FOR_REGEX = '|';
+	private final val TAG = this.getClass.getName()
+	private final val PARAM_SEPERATOR = '|'
+	private final val PARAM_SEPERATOR_FOR_REGEX = '|'
 	private final val LIMIT_OF_DATA_COUNT = 100000
 
 	protected def checkIncludePattern(startIdx: Int, endIdx: Int, targetString: String, pattern: Pattern): Boolean = {
-		val m2 = pattern.matcher(targetString);
+		val m2 = pattern.matcher(targetString)
 		while (m2.find()) {
 			if (startIdx > m2.start() && endIdx < m2.end()) {
 				return true
 			}
 		}
-		return false
+		false
 	}
 
-	protected def resultSetToList(rs: ResultSet) = {
+	protected def resultSetToList(rs: ResultSet): List[ListMap[String, Any]] = {
 		val metaData = rs.getMetaData
 		val listBuffer = new ListBuffer[ListMap[String, Any]]()
 
 		while (rs.next()) {
-			listBuffer += ListMap((for (idx <- (1 to metaData.getColumnCount)) yield (metaData.getColumnName(idx) -> (if (rs.getString(idx) == null) "" else rs.getString(idx)))): _*)
+			listBuffer += ListMap((for (idx <- 1 to metaData.getColumnCount) yield metaData.getColumnName(idx) -> (if (rs.getString(idx) == null) "" else rs.getString(idx))): _*)
 			if (listBuffer.size > LIMIT_OF_DATA_COUNT) {
 				throw new Exception("LIMIT_OF_DATA_COUNT Exception")
 			}
@@ -77,11 +77,11 @@ object DBUtil {
 	}
 
 	def executeQuery[S <: Seq[_]](conn: Connection, sql: String, paramMap: Map[String, Any] = Map())(implicit tagS: ClassTag[S]): Seq[Map[String, Any]] = {
-		val newSql = new StringBuffer();
+		val newSql = new StringBuffer()
 		val params = ListBuffer[String]()
 		val p = Pattern.compile(":[a-zA-Z_\uAC00-\uD7A3][a-zA-Z_0-9\uAC00-\uD7A3]*"); // Parameter RegExp
-		val m = p.matcher(sql);
-		var preIdx = 0;
+		val m = p.matcher(sql)
+		var preIdx = 0
 		while (m.find()) {
 			if (!this.checkIncludePattern(m.start(), m.end(), sql, Pattern.compile("'.*?'"))
 				&& !this.checkIncludePattern(m.start(), m.end(), sql, Pattern.compile("--[^+].*"))
@@ -92,13 +92,13 @@ object DBUtil {
 				}
 				val strQuestion = multiParams.map { _ => "?" }.reduce { (s1, s2) => s1 + "," + s2 }
 
-				newSql.append(sql.substring(preIdx, m.start()) + strQuestion);
-				preIdx = m.start() + m.group().length();
+				newSql.append(sql.substring(preIdx, m.start()) + strQuestion)
+				preIdx = m.start() + m.group().length()
 
-				multiParams.foreach { param => params += param.toString }
+				multiParams.foreach { param => params += param }
 			}
 		}
-		newSql.append(sql.substring(preIdx));
+		newSql.append(sql.substring(preIdx))
 		val prepTry = Try { conn.prepareStatement(newSql.toString) }
 		prepTry.flatMap { prep =>
 			Try {
@@ -127,11 +127,11 @@ object DBUtil {
 	def executeUpdate(conn: Connection, sql: String, paramMap: Map[String, Any] = Map()): Int = {
 		var prep: Option[PreparedStatement] = None
 		try {
-			val newSql = new StringBuffer();
+			val newSql = new StringBuffer()
 			val params = ListBuffer[String]()
 			val p = Pattern.compile(":[a-zA-Z_\uAC00-\uD7A3][a-zA-Z_0-9\uAC00-\uD7A3]*"); // Parameter RegExp
-			val m = p.matcher(sql);
-			var preIdx = 0;
+			val m = p.matcher(sql)
+			var preIdx = 0
 			while (m.find()) {
 				if (!this.checkIncludePattern(m.start(), m.end(), sql, Pattern.compile("'.*?'"))
 					&& !this.checkIncludePattern(m.start(), m.end(), sql, Pattern.compile("--[^+].*"))
@@ -142,13 +142,13 @@ object DBUtil {
 					}
 					val strQuestion = multiParams.map { _ => "?" }.reduce { (s1, s2) => s1 + "," + s2 }
 
-					newSql.append(sql.substring(preIdx, m.start()) + strQuestion);
-					preIdx = m.start() + m.group().length();
+					newSql.append(sql.substring(preIdx, m.start()) + strQuestion)
+					preIdx = m.start() + m.group().length()
 
 					multiParams.foreach { param => params += param }
 				}
 			}
-			newSql.append(sql.substring(preIdx));
+			newSql.append(sql.substring(preIdx))
 			prep = Some(conn.prepareStatement(newSql.toString))
 			params.zipWithIndex.foreach {
 				case (param, idx) =>
@@ -170,11 +170,11 @@ object DBUtil {
 	}
 
 	def logQuery(sql: String, paramMap: Map[String, Any] = Map()): Unit = {
-		val newSql = new StringBuffer();
+		val newSql = new StringBuffer()
 		val params = ListBuffer[String]()
 		val p = Pattern.compile(":[a-zA-Z_\uAC00-\uD7A3][a-zA-Z_0-9\uAC00-\uD7A3]*"); // Parameter RegExp
-		val m = p.matcher(sql);
-		var preIdx = 0;
+		val m = p.matcher(sql)
+		var preIdx = 0
 		while (m.find()) {
 			if (!this.checkIncludePattern(m.start(), m.end(), sql, Pattern.compile("'.*?'"))
 				&& !this.checkIncludePattern(m.start(), m.end(), sql, Pattern.compile("--[^+].*"))
@@ -185,14 +185,14 @@ object DBUtil {
 				}
 				val strQuestion = "'" + multiParams.reduce { (s1, s2) => "" + s1 + "" + "','" + s2 } + "'"
 
-				newSql.append(sql.substring(preIdx, m.start()) + strQuestion);
-				preIdx = m.start() + m.group().length();
+				newSql.append(sql.substring(preIdx, m.start()) + strQuestion)
+				preIdx = m.start() + m.group().length()
 
-				multiParams.foreach { param => params += param.toString }
+				multiParams.foreach { param => params += param }
 			}
 		}
 		println("------------------------------SQL------------------------------")
-		println(newSql.append(sql.substring(preIdx)));
+		println(newSql.append(sql.substring(preIdx)))
 		println("----------------------------//SQL------------------------------")
 		println()
 	}

@@ -7,34 +7,35 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 
 import scala.collection.mutable.Queue
-
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
 
+import scala.collection.mutable
+
 object JewelryProductImageModifier {
-	def main(args: Array[String]) = {
+	def main(args: Array[String]): Unit = {
 		println(this.getClass.getName + " 시작")
 
 		def getCroppedImage(source: BufferedImage, tolerance: Double, marginRatio: Double): BufferedImage = {
 			// Get our top-left pixel color as our "baseline" for cropping
 			val baseColor = Color.WHITE.getRGB
 
-			val width = source.getWidth();
-			val height = source.getHeight();
+			val width = source.getWidth()
+			val height = source.getHeight()
 
-			var (topY, topX) = (Integer.MAX_VALUE, Integer.MAX_VALUE);
-			var (bottomY, bottomX) = (-1, -1);
+			var (topY, topX) = (Integer.MAX_VALUE, Integer.MAX_VALUE)
+			var (bottomY, bottomX) = (-1, -1)
 
 			var startTime = System.currentTimeMillis()
 
-			(0 to height - 1).foreach { y =>
-				(0 to width - 1).foreach { x =>
+			(0 until height).foreach { y =>
+				(0 until width).foreach { x =>
 					if (colorWithinTolerance(baseColor, source.getRGB(x, y), tolerance)) {
-						if (x < topX) topX = x;
-						if (y < topY) topY = y;
-						if (x > bottomX) bottomX = x;
-						if (y > bottomY) bottomY = y;
+						if (x < topX) topX = x
+						if (y < topY) topY = y
+						if (x > bottomX) bottomX = x
+						if (y > bottomY) bottomY = y
 					}
 				}
 			}
@@ -47,39 +48,39 @@ object JewelryProductImageModifier {
 			val newWidth = (bottomX - topX + 1) + marginX * 2
 			val newHeight = (bottomY - topY + 1) + marginY * 2
 
-			val destination = new BufferedImage(newWidth, newHeight, source.getType);
+			val destination = new BufferedImage(newWidth, newHeight, source.getType)
 
 			destination.getGraphics.setColor(Color.WHITE)
 			destination.getGraphics.fillRect(0, 0, newWidth, newHeight)
 			destination.getGraphics.drawImage(
 				source, marginX, marginY, destination.getWidth() - marginX, destination.getHeight() - marginY,
-				topX, topY, bottomX, bottomY, null);
+				topX, topY, bottomX, bottomY, null)
 
-			destination;
+			destination
 		}
 
 		def colorWithinTolerance(a: Int, b: Int, tolerance: Double): Boolean = {
-			val aAlpha = ((a & 0xFF000000) >>> 24); // Alpha level
-			val aRed = ((a & 0x00FF0000) >>> 16); // Red level
-			val aGreen = ((a & 0x0000FF00) >>> 8); // Green level
-			val aBlue = (a & 0x000000FF); // Blue level
+			val aAlpha = (a & 0xFF000000) >>> 24; // Alpha level
+			val aRed = (a & 0x00FF0000) >>> 16; // Red level
+			val aGreen = (a & 0x0000FF00) >>> 8; // Green level
+			val aBlue = a & 0x000000FF; // Blue level
 
-			val bAlpha = ((b & 0xFF000000) >>> 24); // Alpha level
-			val bRed = ((b & 0x00FF0000) >>> 16); // Red level
-			val bGreen = ((b & 0x0000FF00) >>> 8); // Green level
-			val bBlue = (b & 0x000000FF); // Blue level
+			val bAlpha = (b & 0xFF000000) >>> 24; // Alpha level
+			val bRed = (b & 0x00FF0000) >>> 16; // Red level
+			val bGreen = (b & 0x0000FF00) >>> 8; // Green level
+			val bBlue = b & 0x000000FF; // Blue level
 
 			val distance = Math.sqrt(
 				(aAlpha - bAlpha) * (aAlpha - bAlpha)
 					+ (aRed - bRed) * (aRed - bRed)
 					+ (aGreen - bGreen) * (aGreen - bGreen)
-					+ (aBlue - bBlue) * (aBlue - bBlue));
+					+ (aBlue - bBlue) * (aBlue - bBlue))
 
 			// 510.0 is the maximum distance between two colors 
 			// (0,0,0,0 -> 255,255,255,255)
-			val percentAway = distance / 510.0d;
+			val percentAway = distance / 510.0d
 
-			(percentAway > tolerance);
+			(percentAway > tolerance)
 		}
 
 		val sep = System.getProperty("file.separator")
@@ -129,10 +130,10 @@ object JewelryProductImageModifier {
 		}
 		*/
 
-		val fileQueue = new Queue[File]
+		val fileQueue = new mutable.Queue[File]
 		val path = "D:\\Works\\Develop\\Scala\\scala_script\\제품사진"
 		fileQueue.enqueue(new File(path))
-		while (!fileQueue.isEmpty) {
+		while (fileQueue.nonEmpty) {
 			val inFile = fileQueue.dequeue()
 			if (inFile.isDirectory()) {
 				inFile.listFiles().foreach { x => fileQueue.enqueue(x) }
@@ -151,7 +152,7 @@ object JewelryProductImageModifier {
 				//val is = new FileInputStream(inFile);
 				val os = new FileOutputStream(fileToCompressed)
 
-				val quality = 0.5f;
+				val quality = 0.5f
 
 				// create a BufferedImage as the result of decoding the supplied InputStream
 				val marginRatio = fileToRename.getName.substring(3, 4) match {
@@ -159,32 +160,32 @@ object JewelryProductImageModifier {
 					case "R" => 0.3
 					case _ => 0.0
 				}
-				val image = getCroppedImage(ImageIO.read(is), 0.05, marginRatio);
+				val image = getCroppedImage(ImageIO.read(is), 0.05, marginRatio)
 
 				// get all image writers for JPG format
-				val writers = ImageIO.getImageWritersByFormatName("jpg");
+				val writers = ImageIO.getImageWritersByFormatName("jpg")
 
-				if (!writers.hasNext()) throw new IllegalStateException("No writers found");
+				if (!writers.hasNext()) throw new IllegalStateException("No writers found")
 
-				val writer = writers.next();
-				val ios = ImageIO.createImageOutputStream(os);
-				writer.setOutput(ios);
+				val writer = writers.next()
+				val ios = ImageIO.createImageOutputStream(os)
+				writer.setOutput(ios)
 
-				val param = writer.getDefaultWriteParam();
+				val param = writer.getDefaultWriteParam()
 
 				// compress to a given quality
-				param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-				param.setCompressionQuality(quality);
+				param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT)
+				param.setCompressionQuality(quality)
 
 				// appends a complete image stream containing a single image and
 				//associated stream and image metadata and thumbnails to the output
-				writer.write(null, new IIOImage(image, null, null), param);
+				writer.write(null, new IIOImage(image, null, null), param)
 
 				// close all streams
-				is.close();
-				os.close();
-				ios.close();
-				writer.dispose();
+				is.close()
+				os.close()
+				ios.close()
+				writer.dispose()
 
 				fileToRename.delete()
 			}
