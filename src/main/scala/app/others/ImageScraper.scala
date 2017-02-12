@@ -7,7 +7,7 @@ import akka.Done
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.headers._
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.ByteString
@@ -23,15 +23,17 @@ import scala.util.Try
 
 object ImageScraper {
   val config: Config = ConfigFactory.load()
-    .withValue("akka.loglevel", ConfigValueFactory.fromAnyRef("OFF"))
-    .withValue("akka.stdout-loglevel", ConfigValueFactory.fromAnyRef("OFF"))
-    .withValue("akka.http.host-connection-pool.client.parsing.illegal-header-warnings", ConfigValueFactory.fromAnyRef(false))
-    .withValue("akka.http.host-connection-pool.max-connections", ConfigValueFactory.fromAnyRef("1"))
-    .withValue("akka.http.host-connection-pool.max-open-requests", ConfigValueFactory.fromAnyRef("1024"))
+      .withValue("akka.loglevel", ConfigValueFactory.fromAnyRef("OFF"))
+      .withValue("akka.stdout-loglevel", ConfigValueFactory.fromAnyRef("OFF"))
+      .withValue("akka.http.host-connection-pool.client.parsing.illegal-header-warnings", ConfigValueFactory.fromAnyRef(false))
+      .withValue("akka.http.host-connection-pool.max-connections", ConfigValueFactory.fromAnyRef("1"))
+      .withValue("akka.http.host-connection-pool.max-open-requests", ConfigValueFactory.fromAnyRef("1024"))
 
   implicit val actorSystem = ActorSystem("myActorSystem", config)
   implicit val materializer = ActorMaterializer()
   implicit val executionContext: ExecutionContextExecutor = actorSystem.dispatcher
+
+  var cookies: Seq[HttpCookie] = Seq()
 
   val getPagesFor: Map[String, (String) => Seq[(String, String)]] = Map(
     "H-HENTAI" -> { htmlContent: String =>
@@ -59,16 +61,21 @@ object ImageScraper {
       imgContainersOpt.getOrElse(Seq[Element]()).map(_.attr("href"))
     })
 
-  val getImgSrcsFor: Map[String, (String) => Seq[String]] = Map(
+  val getImgSrcsFor: Map[String, (String) => Seq[(String, String)]] = Map(
     "H-HENTAI" -> { htmlContent: String =>
       val doc = JsoupBrowser().parseString(htmlContent)
 
-      val imgsOpt: Option[Seq[Element]] = for {
+      val nameOpt: Option[Seq[String]] = for {
+        sni <- doc >?> element(".sni")
+        divs <- doc >?> elementList(".sn + div")
+      } yield divs.map(_.text.split(" ")(0))
+
+      val imgsOpt: Option[Seq[String]] = for {
         sni <- doc >?> element(".sni")
         imgs <- sni >?> elementList("img[style]")
-      } yield imgs
+      } yield imgs.map(_.attr("src"))
 
-      imgsOpt.getOrElse(Seq[Element]()).map(_.attr("src"))
+      nameOpt.getOrElse(Seq[String]()).zip(imgsOpt.getOrElse(Seq[String]()))
     })
 
   def pathToUrl(toPath: String, fromUrl: URL): URL = {
@@ -82,7 +89,7 @@ object ImageScraper {
     else new URL(s"$protocol://$host:$port$fromPath/$toPath")
   }
 
-  def requestUrl(url: URL, method: HttpMethod): Future[HttpResponse] = {
+  def requestUrl(url: URL, method: HttpMethod, headers: List[HttpHeader] = List(), entity: RequestEntity = HttpEntity.Empty): Future[HttpResponse] = {
     val connection =
       if (url.getProtocol == "https") Http().outgoingConnectionHttps(url.getHost)
       else Http().outgoingConnection(url.getHost)
@@ -93,8 +100,13 @@ object ImageScraper {
       if (url.getPath.last == '/') uriBuilder.append("/")
     }
     if (url.getQuery != null) uriBuilder.append("?" + url.getQuery)
-    val req = HttpRequest(method = method, uri = uriBuilder.toString)
-      .withHeaders(RawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36"))
+    val defaultHeaders = if (headers.isEmpty)
+      List(RawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36"))
+    else
+      headers
+    val req = HttpRequest(method = method, uri = uriBuilder.toString, entity = entity, headers = defaultHeaders)
+    //println(req.headers)
+    //println(req.entity)
     Source.single(req).via(connection).runWith(Sink.head)
   }
 
@@ -163,41 +175,78 @@ object ImageScraper {
     }
   }
 
-  def savePage(siteName: String, title: String, pathForSave: String, url: URL, method: HttpMethod): Future[Seq[Done]] = {
-    val imgContainersFt = getItems(getImgContainersFor(siteName), url, method)
+  def savePage(siteName: String, title: String, pathForSave: String, url: URL, method: HttpMethod, headers: List[HttpHeader]): Future[Seq[Done]] = {
+    val imgContainersFt = getItems(getImgContainersFor(siteName), url, method, headers)
     imgContainersFt.flatMap { imgContainers =>
       imgContainers.foreach(c => println(s"container: $c"))
       Future.sequence(imgContainers.zipWithIndex.flatMap { case (container, idx) =>
         val newUrl = pathToUrl(container, url)
-        val srcAndUrls = Await.result(getItems(getImgSrcsFor(siteName), newUrl, method), Duration.Inf).map((_, newUrl))
-        val imgUrls = srcAndUrls.map(src => pathToUrl(src._1, src._2))
-        imgUrls.map { imgUrl =>
+        val items = Await.result(getItems(getImgSrcsFor(siteName), newUrl, method, headers), Duration.Inf).map(i => (i._1, i._2, newUrl))
+        val imgUrls = items.map(i => (i._1, pathToUrl(i._2, i._3)))
+        imgUrls.map { case (fileName, imgUrl) =>
           val targetDir = new File(pathForSave)
-          val extension = ".jpg"
-          val fileName = title + "_" + "%05d".format(idx + 1) + extension
           val targetFile = new File(targetDir.getAbsolutePath + "/" + fileName)
-          println(s"target: ${targetFile}, source: ${imgUrl}")
-          saveFileFromUrl(imgUrl, targetFile, method)
+          if (!targetFile.exists()) {
+            println(s"target: ${targetFile}, source: ${imgUrl}")
+            saveFileFromUrl(imgUrl, targetFile, method)
+          } else {
+            Future(Done)
+          }
         }
       })
     }
   }
 
-  def getItems[T](getter: (String) => Seq[T], url: URL, method: HttpMethod): Future[Seq[T]] = {
+  def getItems[T](getter: (String) => Seq[T], url: URL, method: HttpMethod, headers: List[HttpHeader]): Future[Seq[T]] = {
     for {
-      response <- requestUrl(url, method)
+      response <- requestUrl(url, method, headers)
       content <- getContent(response, url, method)
       items = getter(content)
     } yield items
   }
 
-  def saveImages(siteName: String, rootPathForGet: String, rootPathForSave: String): Seq[Future[Seq[Done]]] = {
+  def saveImages(siteName: String, rootPathForGet: String, rootPathForSave: String, headers: List[HttpHeader]): Seq[Future[Seq[Done]]] = {
     val targetDir = new File(rootPathForSave)
     if (!targetDir.exists()) targetDir.mkdirs()
     val rootUrl = new URL(rootPathForGet)
-    val pages = Await.result(getItems(getPagesFor(siteName), rootUrl, HttpMethods.GET), Duration.Inf)
+    val pages = Await.result(getItems(getPagesFor(siteName), rootUrl, HttpMethods.GET, headers), Duration.Inf)
     pages.foreach(println)
-    pages.map(page => savePage(siteName, page._1, rootPathForSave, pathToUrl(page._2, rootUrl), HttpMethods.GET))
+    pages.map(page => savePage(siteName, page._1, rootPathForSave, pathToUrl(page._2, rootUrl), HttpMethods.GET, headers))
+  }
+
+  def getRegisteredHeader(url: URL): (List[HttpHeader], String) = {
+    val resp = Await.result(requestUrl(url, HttpMethods.GET), Duration.Inf)
+    val cookies = resp.headers.collect {
+      case c: `Set-Cookie` => c.cookie
+    }
+    println(cookies.head.name + "=" + cookies.head.value.split(";").head)
+
+    val headers = List(
+      RawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"),
+      RawHeader("Accept-Encoding", "gzip, deflate"),
+      RawHeader("Accept-Language", "ko-KR,ko;q=0.8,en-US;q=0.6,en;q=0.4"),
+      RawHeader("Content-Type", "application/x-www-form-urlencoded"),
+      RawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36"),
+      Host("www.firewallproxy.ga"),
+      Origin("http://www.firewallproxy.ga"),
+      Referer("http://www.firewallproxy.ga/"),
+      RawHeader("Upgrade-Insecure-Request", "1"),
+      RawHeader("DNT", "1"),
+      Cookie(cookies.head.name, cookies.head.value)
+      //RawHeader("Cookie", cookies.head.name + "=" + cookies.head.value.split(";").head)
+    )
+    val formData = FormData("u" -> "https%3A%2F%2Fe-hentai.org%2Fs%2Faf0f080f87%2F158177-187",
+      "encodeURL" -> "on",
+      "allowCookies" -> "on",
+      "stripJS" -> "on",
+      "stripObjects" -> "on")
+    val response = Await.result(requestUrl(new URL("http://www.firewallproxy.ga/includes/process.php?action=update"), HttpMethods.POST, headers, formData.toEntity), Duration.Inf)
+    //println(response.status.intValue)
+    println(response.getHeader("Location").get.value)
+    (List(
+      RawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36"),
+      Cookie(cookies.head.name, cookies.head.value)
+    ), response.getHeader("Location").get.value)
   }
 
   def main(args: Array[String]): Unit = {
@@ -207,10 +256,17 @@ object ImageScraper {
 
     val startTime = System.currentTimeMillis
 
-    val rootPathForGet = "http://newproxy.ninja/index.php?q=aHR0cHM6Ly9lLWhlbnRhaS5vcmcvZy8xNTgxNzcvYjhiNjRmZmJhNy8%3D"
+    val rootPathForGet = "https://e-hentai.org/g/158177/b8b64ffba7/"
+    //val rootPathForGet = "http://newproxy.ninja/index.php?q=aHR0cHM6Ly9lLWhlbnRhaS5vcmcvZy8xNTgxNzcvYjhiNjRmZmJhNy8%3D"
+    //val rootPathForGet = "http://neweb.gq/index.php?q=aHR0cHM6Ly9lLWhlbnRhaS5vcmcvZy8xNTgxNzcvYjhiNjRmZmJhNy8%3D"
+    //val rootPathForGet = "http://www.freewebproxyserver.pw/index.php?q=aHR0cHM6Ly9lLWhlbnRhaS5vcmcvZy8xNTgxNzcvYjhiNjRmZmJhNy8%2FcD00"
+    //val rootPathForGet = "http://www.firewallproxy.ga/browse.php?u=LXb2y2kKFXAkB%2BBvmpGvq7ZLMb6J8OzHsq3L7oRDZ6s%2FQ1prLFHYbw%3D%3D&b=29&f=norefer"
+    val proxyServerPath = "http://www.firewallproxy.ga/"
     val rootPathForSave = "comics/드나4"
 
-    val futureList = saveImages("H-HENTAI", rootPathForGet, rootPathForSave)
+    val (headers, location) = getRegisteredHeader(new URL(proxyServerPath))
+
+    val futureList = saveImages("H-HENTAI", rootPathForGet, rootPathForSave, headers)
     Future.sequence(futureList).recover {
       case e: Exception =>
         e.printStackTrace()
