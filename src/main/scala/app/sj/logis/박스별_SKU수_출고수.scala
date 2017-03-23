@@ -51,37 +51,48 @@ object 박스별_SKU수_출고수 {
         val query = strSQL.toString
         val param = Map("년월" -> yearMonth)
         DBUtil.logQuery(query, param)
-        val dataList = DBUtil.executeQueryToStream(conn, query, param)
-        if (dataList.nonEmpty) {
+        val queryResult = DBUtil.executeQueryToIterator(conn, query, param)
+        if (queryResult.nonEmpty) {
+          val head = queryResult.next()
+
           val wb = new XSSFWorkbook()
           val sheet1 = wb.createSheet("박스별내역")
           val createHelper = wb.getCreationHelper
           val headerRow = sheet1.createRow(0)
+
+          def aux(data: Map[String, Any], rowIdx: Int): Unit = {
+            val row = sheet1.createRow(rowIdx + 1)
+            //row.createCell(0).setCellValue(createHelper.createRichTextString(yearMonth))
+            data.keys.zipWithIndex.foreach {
+              case (title, cellIdx) =>
+                val cell = row.createCell(cellIdx)
+                val cellValue = data.getOrElse(title, "").toString
+                if (title == "출고수량" || title == "SKU수") {
+                  val cellStyle = wb.createCellStyle()
+                  cellStyle.setDataFormat(wb.createDataFormat().getFormat("#,###"))
+                  cell.setCellStyle(cellStyle)
+                  cell.setCellValue(cellValue.toLong)
+                  cell.setCellType(Cell.CELL_TYPE_NUMERIC)
+                } else {
+                  cell.setCellValue(cellValue)
+                  cell.setCellType(Cell.CELL_TYPE_STRING)
+                }
+            }
+          }
+
           //headerRow.createCell(0).setCellValue(createHelper.createRichTextString("년월"))
-          dataList.head.keys.zipWithIndex.foreach {
+          head.keys.zipWithIndex.foreach {
             case (title, cellIdx) =>
               headerRow.createCell(cellIdx).setCellValue(createHelper.createRichTextString(title))
           }
 
-          dataList.zipWithIndex.foreach {
-            case (data, rowIdx) =>
-              val row = sheet1.createRow(rowIdx + 1)
-              //row.createCell(0).setCellValue(createHelper.createRichTextString(yearMonth))
-              data.keys.zipWithIndex.foreach {
-                case (title, cellIdx) =>
-                  val cell = row.createCell(cellIdx)
-                  val cellValue = data.getOrElse(title, "").toString
-                  if (title == "출고수량" || title == "SKU수") {
-                    val cellStyle = wb.createCellStyle()
-                    cellStyle.setDataFormat(wb.createDataFormat().getFormat("#,###"))
-                    cell.setCellStyle(cellStyle)
-                    cell.setCellValue(cellValue.toLong)
-                    cell.setCellType(Cell.CELL_TYPE_NUMERIC)
-                  } else {
-                    cell.setCellValue(cellValue)
-                    cell.setCellType(Cell.CELL_TYPE_STRING)
-                  }
-              }
+          var rowIdx = 0
+          aux(head, rowIdx)
+          rowIdx += 1
+
+          queryResult.foreach { data =>
+            aux(data, rowIdx)
+            rowIdx += 1
           }
 
           val fileOut = new FileOutputStream(s"박스별내역/박스별내역${yearMonth}_세정.xlsx")
